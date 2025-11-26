@@ -1,4 +1,4 @@
-package com.diego.interview.application.usecase.impl;
+package com.diego.interview.application.usecase;
 
 import com.diego.interview.application.usecase.dto.PagedResponse;
 import com.diego.interview.application.usecase.dto.UserResponse;

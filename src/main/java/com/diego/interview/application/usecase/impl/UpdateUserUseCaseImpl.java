@@ -1,8 +1,8 @@
 package com.diego.interview.application.usecase.impl;
-
 import com.diego.interview.application.usecase.UpdateUserUseCase;
 import com.diego.interview.application.usecase.dto.UpdateUserCommand;
 import com.diego.interview.application.usecase.dto.UserResponse;
+import com.diego.interview.application.usecase.mapper.UserUseCaseMapper;
 import com.diego.interview.domain.exception.BusinessException;
 import com.diego.interview.domain.model.Phone;
 import com.diego.interview.domain.model.User;
@@ -72,47 +72,13 @@ public class UpdateUserUseCaseImpl implements UpdateUserUseCase {
         }
 
         if (command.getPhones() != null) {
-            List<Phone> phones = command.getPhones()
-                    .stream()
-                    .map(p -> Phone.builder()
-                            .number(p.getNumber())
-                            .cityCode(p.getCityCode())
-                            .countryCode(p.getCountryCode())
-                            .build())
-                    .toList();
+            List<Phone> phones = UserUseCaseMapper.toDomainPhonesFromUpdate(command.getPhones());
             user.setPhones(phones);
         }
 
         user.setUpdatedAt(now);
 
         User saved = userRepository.save(user);
-        return toResponse(saved);
-    }
-
-    private UserResponse toResponse(User user) {
-        UserResponse resp = new UserResponse();
-        resp.setId(user.getId().toString());
-        resp.setCreated(user.getCreatedAt());
-        resp.setModified(user.getUpdatedAt());
-        resp.setLastLogin(user.getLastLogin());
-        resp.setToken(user.getToken());
-        resp.setActive(user.isActive());
-        resp.setName(user.getName());
-        resp.setEmail(user.getEmail());
-
-        if (user.getPhones() != null) {
-            resp.setPhones(
-                    user.getPhones().stream()
-                            .map(p -> {
-                                UserResponse.PhoneResponse pr = new UserResponse.PhoneResponse();
-                                pr.setNumber(p.getNumber());
-                                pr.setCityCode(p.getCityCode());
-                                pr.setCountryCode(p.getCountryCode());
-                                return pr;
-                            }).toList()
-            );
-        }
-
-        return resp;
+        return UserUseCaseMapper.toUserResponse(saved);
     }
 }

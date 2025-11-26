@@ -1,20 +1,20 @@
 package com.diego.interview.application.usecase.impl;
-
-import com.diego.interview.domain.exception.BusinessException;
-import com.diego.interview.domain.model.Phone;
-import com.diego.interview.domain.model.User;
-import com.diego.interview.domain.port.TokenProviderPort;
-import com.diego.interview.domain.port.UserRepositoryPort;
 import com.diego.interview.application.usecase.CreateUserUseCase;
 import com.diego.interview.application.usecase.dto.CreateUserCommand;
 import com.diego.interview.application.usecase.dto.UserResponse;
+import com.diego.interview.application.usecase.mapper.UserUseCaseMapper;
+import com.diego.interview.domain.exception.BusinessException;
+import com.diego.interview.domain.model.Phone;
+import com.diego.interview.domain.model.User;
+import com.diego.interview.domain.port.PasswordEncoderPort;
+import com.diego.interview.domain.port.TokenProviderPort;
+import com.diego.interview.domain.port.UserRepositoryPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.regex.Pattern;
-import java.util.stream.Collectors;
 
 public class CreateUserUseCaseImpl implements CreateUserUseCase {
 
@@ -24,15 +24,18 @@ public class CreateUserUseCaseImpl implements CreateUserUseCase {
     private final Pattern emailPattern;
     private final Pattern passwordPattern;
     private final TokenProviderPort tokenProviderPort;
+    private final PasswordEncoderPort passwordEncoderPort;
 
     public CreateUserUseCaseImpl(UserRepositoryPort userRepositoryPort,
                                  Pattern emailPattern,
                                  Pattern passwordPattern,
-                                 TokenProviderPort tokenProviderPort) {
+                                 TokenProviderPort tokenProviderPort,
+                                 PasswordEncoderPort passwordEncoderPort) {
         this.userRepositoryPort = userRepositoryPort;
         this.emailPattern = emailPattern;
         this.passwordPattern = passwordPattern;
         this.tokenProviderPort = tokenProviderPort;
+        this.passwordEncoderPort = passwordEncoderPort;
     }
 
     @Override
@@ -47,7 +50,7 @@ public class CreateUserUseCaseImpl implements CreateUserUseCase {
             String rawPassword = validatePasswordFormat(command.getPassword());
             ensureEmailNotExists(email);
 
-            String encodedPassword = rawPassword;
+            String encodedPassword = passwordEncoderPort.encode(rawPassword);
 
             User userToSave = buildUser(command, email, encodedPassword, now);
 
@@ -57,7 +60,7 @@ public class CreateUserUseCaseImpl implements CreateUserUseCase {
             log.info("User created successfully. id={}, email={}, elapsedMs={}",
                     saved.getId(), saved.getEmail(), elapsedNanos / 1_000_000);
 
-            return toUserResponse(saved);
+            return UserUseCaseMapper.toUserResponse(saved);
 
         } catch (BusinessException ex) {
             long elapsedNanos = System.nanoTime() - start;
@@ -71,7 +74,6 @@ public class CreateUserUseCaseImpl implements CreateUserUseCase {
             throw ex;
         }
     }
-
 
     private String validateEmailFormat(String email) {
         if (!emailPattern.matcher(email).matches()) {
@@ -97,13 +99,12 @@ public class CreateUserUseCaseImpl implements CreateUserUseCase {
                 });
     }
 
-
     private User buildUser(CreateUserCommand command,
                            String email,
                            String encodedPassword,
                            LocalDateTime now) {
 
-        List<Phone> phones = toPhones(command.getPhones());
+        List<Phone> phones = UserUseCaseMapper.toDomainPhonesFromCreate(command.getPhones());
 
         User tmpUser = User.builder()
                 .name(command.getName())
@@ -124,46 +125,5 @@ public class CreateUserUseCaseImpl implements CreateUserUseCase {
                 phones != null ? phones.size() : 0);
 
         return tmpUser;
-    }
-
-    private List<Phone> toPhones(List<CreateUserCommand.PhoneCommand> phoneCommands) {
-        if (phoneCommands == null) {
-            log.debug("No phones provided in request.");
-            return List.of();
-        }
-
-        return phoneCommands.stream()
-                .map(p -> Phone.builder()
-                        .number(p.getNumber())
-                        .cityCode(p.getCityCode())
-                        .countryCode(p.getCountryCode())
-                        .build())
-                .collect(Collectors.toList());
-    }
-
-    private UserResponse toUserResponse(User user) {
-        UserResponse resp = new UserResponse();
-        resp.setId(user.getId().toString());
-        resp.setCreated(user.getCreatedAt());
-        resp.setModified(user.getUpdatedAt());
-        resp.setLastLogin(user.getLastLogin());
-        resp.setToken(user.getToken());
-        resp.setActive(user.isActive());
-        resp.setName(user.getName());
-        resp.setEmail(user.getEmail());
-        resp.setPhones(
-                user.getPhones().stream()
-                        .map(this::toPhoneResponse)
-                        .collect(Collectors.toList())
-        );
-        return resp;
-    }
-
-    private UserResponse.PhoneResponse toPhoneResponse(Phone phone) {
-        UserResponse.PhoneResponse phoneResponse = new UserResponse.PhoneResponse();
-        phoneResponse.setCityCode(phone.getCityCode());
-        phoneResponse.setNumber(phone.getNumber());
-        phoneResponse.setCountryCode(phone.getCountryCode());
-        return phoneResponse;
     }
 }

@@ -6,15 +6,16 @@ import com.diego.interview.infraestructure.out.persistence.entity.PhoneEntity;
 import com.diego.interview.infraestructure.out.persistence.entity.UserEntity;
 
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
 public class UserMapper{
     public static UserEntity toEntity(User user) {
         if (user == null) return null;
-
+        String id= Objects.isNull(user.getId())? UUID.randomUUID().toString() : user.getId().toString();
         UserEntity entity = new UserEntity();
-        entity.setId(UUID.randomUUID().toString());
+        entity.setId(id);
         entity.setName(user.getName());
         entity.setEmail(user.getEmail());
         entity.setPassword(user.getPassword());

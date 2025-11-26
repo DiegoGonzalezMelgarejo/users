@@ -1,13 +1,14 @@
 package com.diego.interview.application;
 
-import com.diego.interview.domain.exception.BusinessException;
-import com.diego.interview.domain.model.Phone;
-import com.diego.interview.domain.model.User;
-import com.diego.interview.domain.port.TokenProviderPort;
-import com.diego.interview.domain.port.UserRepositoryPort;
 import com.diego.interview.application.usecase.dto.CreateUserCommand;
 import com.diego.interview.application.usecase.dto.UserResponse;
 import com.diego.interview.application.usecase.impl.CreateUserUseCaseImpl;
+import com.diego.interview.domain.exception.BusinessException;
+import com.diego.interview.domain.model.Phone;
+import com.diego.interview.domain.model.User;
+import com.diego.interview.domain.port.PasswordEncoderPort;
+import com.diego.interview.domain.port.TokenProviderPort;
+import com.diego.interview.domain.port.UserRepositoryPort;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -25,10 +26,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class CreateUserUseCaseImplTest {
@@ -38,6 +36,9 @@ class CreateUserUseCaseImplTest {
 
     @Mock
     private TokenProviderPort tokenProviderPort;
+
+    @Mock
+    private PasswordEncoderPort passwordEncoderPort;   // 👈 NUEVO MOCK
 
     private Pattern emailPattern;
     private Pattern passwordPattern;
@@ -49,13 +50,20 @@ class CreateUserUseCaseImplTest {
         emailPattern = Pattern.compile("^[^@]+@[^@]+\\.[^@]+$");
         passwordPattern = Pattern.compile("^.{8,}$");
 
-        service = new CreateUserUseCaseImpl(userRepositoryPort, emailPattern, passwordPattern, tokenProviderPort);
+        service = new CreateUserUseCaseImpl(
+                userRepositoryPort,
+                emailPattern,
+                passwordPattern,
+                tokenProviderPort,
+                passwordEncoderPort       // 👈 INYECTAMOS ENCODER
+        );
     }
 
     @Test
     void createUser_shouldCreateUserSuccessfully() {
         String email = "john.doe@test.com";
-        String password = "Password123";
+        String rawPassword = "Password123";
+        String encodedPassword = "encoded-Password123";   // 👈 simulamos hash
         String name = "John Doe";
 
         CreateUserCommand.PhoneCommand phoneCommand =
@@ -67,22 +75,23 @@ class CreateUserUseCaseImplTest {
 
         CreateUserCommand command = CreateUserCommand.builder()
                 .email(email)
-                .password(password)
+                .password(rawPassword)
                 .name(name)
                 .phones(List.of(phoneCommand))
                 .build();
 
         when(userRepositoryPort.findByEmail(email)).thenReturn(Optional.empty());
-
+        when(passwordEncoderPort.encode(rawPassword)).thenReturn(encodedPassword); // 👈 mock encode
         when(tokenProviderPort.generateToken(any(User.class))).thenReturn("dummy-token");
 
         UUID generatedId = UUID.randomUUID();
         LocalDateTime now = LocalDateTime.now();
+
         User savedUser = User.builder()
                 .id(generatedId)
                 .name(name)
                 .email(email)
-                .password(password)
+                .password(encodedPassword) // 👈 en BD queda hasheada
                 .phones(List.of(
                         Phone.builder()
                                 .number("1234567")
@@ -104,12 +113,15 @@ class CreateUserUseCaseImplTest {
         ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
         verify(userRepositoryPort, times(1)).save(userCaptor.capture());
         verify(userRepositoryPort, times(1)).findByEmail(email);
+        verify(passwordEncoderPort, times(1)).encode(rawPassword);        // 👈 se llamó al encoder
         verify(tokenProviderPort, times(1)).generateToken(any(User.class));
 
         User userSentToRepo = userCaptor.getValue();
         assertThat(userSentToRepo.getEmail()).isEqualTo(email);
         assertThat(userSentToRepo.getName()).isEqualTo(name);
         assertThat(userSentToRepo.getPhones()).hasSize(1);
+        // 👇 comprobamos que no se guardó la raw password
+        assertThat(userSentToRepo.getPassword()).isEqualTo(encodedPassword);
 
         assertThat(response.getId()).isEqualTo(generatedId.toString());
         assertThat(response.getEmail()).isEqualTo(email);
@@ -139,6 +151,7 @@ class CreateUserUseCaseImplTest {
 
         verify(userRepositoryPort, never()).save(any());
         verify(userRepositoryPort, never()).findByEmail(anyString());
+        verify(passwordEncoderPort, never()).encode(any());
         verify(tokenProviderPort, never()).generateToken(any());
     }
 
@@ -163,6 +176,7 @@ class CreateUserUseCaseImplTest {
 
         verify(userRepositoryPort, never()).save(any());
         verify(userRepositoryPort, never()).findByEmail(anyString());
+        verify(passwordEncoderPort, never()).encode(any());
         verify(tokenProviderPort, never()).generateToken(any());
     }
 
@@ -194,6 +208,7 @@ class CreateUserUseCaseImplTest {
 
         verify(userRepositoryPort, times(1)).findByEmail(email);
         verify(userRepositoryPort, never()).save(any());
+        verify(passwordEncoderPort, never()).encode(any());
         verify(tokenProviderPort, never()).generateToken(any());
     }
 }

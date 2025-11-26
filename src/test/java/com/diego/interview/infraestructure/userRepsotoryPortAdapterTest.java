@@ -1,4 +1,5 @@
 package com.diego.interview.infraestructure;
+
 import com.diego.interview.domain.model.User;
 import com.diego.interview.infraestructure.out.persistence.entity.UserEntity;
 import com.diego.interview.infraestructure.out.persistence.repository.UserJpaRepository;
@@ -9,16 +10,19 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
-import static org.mockito.Mockito.any;
 
 @ExtendWith(MockitoExtension.class)
 class userRepsotoryPortAdapterTest {
@@ -155,5 +159,76 @@ class userRepsotoryPortAdapterTest {
         adapter.deleteById(id);
 
         verify(jpaRepository, times(1)).deleteById(id.toString());
+    }
+
+    // 🔽 NUEVOS TESTS 🔽
+
+    @Test
+    void findAllPaged_shouldReturnMappedUsersList() {
+        int page = 1;
+        int size = 2;
+        LocalDateTime now = LocalDateTime.now();
+
+        UserEntity e1 = new UserEntity();
+        e1.setId(UUID.randomUUID().toString());
+        e1.setName("User 1");
+        e1.setEmail("user1@test.com");
+        e1.setPassword("secret");
+        e1.setCreatedAt(now);
+        e1.setUpdatedAt(now);
+        e1.setLastLogin(now);
+        e1.setActive(true);
+        e1.setToken("t1");
+
+        UserEntity e2 = new UserEntity();
+        e2.setId(UUID.randomUUID().toString());
+        e2.setName("User 2");
+        e2.setEmail("user2@test.com");
+        e2.setPassword("secret");
+        e2.setCreatedAt(now);
+        e2.setUpdatedAt(now);
+        e2.setLastLogin(now);
+        e2.setActive(true);
+        e2.setToken("t2");
+
+        when(jpaRepository.findAll(any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(e1, e2)));
+
+        var result = adapter.findAllPaged(page, size);
+
+        ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
+        verify(jpaRepository, times(1)).findAll(pageableCaptor.capture());
+
+        Pageable usedPageable = pageableCaptor.getValue();
+        assertThat(usedPageable.getPageNumber()).isEqualTo(page);
+        assertThat(usedPageable.getPageSize()).isEqualTo(size);
+
+        assertThat(result).hasSize(2);
+        assertThat(result.get(0).getEmail()).isEqualTo("user1@test.com");
+        assertThat(result.get(1).getEmail()).isEqualTo("user2@test.com");
+    }
+
+    @Test
+    void findAllPaged_shouldReturnEmptyListWhenNoUsers() {
+        int page = 0;
+        int size = 5;
+
+        when(jpaRepository.findAll(any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of()));
+
+        var result = adapter.findAllPaged(page, size);
+
+        verify(jpaRepository, times(1)).findAll(any(Pageable.class));
+        assertThat(result).isEmpty();
+    }
+
+    @Test
+    void countAll_shouldDelegateToJpaCount() {
+        when(jpaRepository.count()).thenReturn(5L);
+
+        long result = adapter.countAll();
+
+        verify(jpaRepository, times(1)).count();
+        assertThat(result).isEqualTo(5L);
     }
 }

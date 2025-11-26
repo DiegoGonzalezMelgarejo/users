@@ -5,12 +5,15 @@ import com.diego.interview.domain.model.User;
 import com.diego.interview.infraestructure.out.persistence.entity.UserEntity;
 import com.diego.interview.infraestructure.out.persistence.mapper.UserMapper;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 import static com.diego.interview.infraestructure.out.persistence.mapper.UserMapper.toDomain;
 import static com.diego.interview.infraestructure.out.persistence.mapper.UserMapper.toEntity;
 
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 public class UserRepositoryAdapter implements UserRepositoryPort {
 
     private final UserJpaRepository jpa;
@@ -39,6 +42,20 @@ public class UserRepositoryAdapter implements UserRepositoryPort {
     @Override
     public void deleteById(UUID id) {
         jpa.deleteById(id.toString());
+    }
+
+
+    @Override
+    public List<User> findAllPaged(int page, int size) {
+        Pageable pageable = PageRequest.of(page, size);
+        return jpa.findAll(pageable)
+                .map(UserMapper::toDomain)
+                .toList();
+    }
+
+    @Override
+    public long countAll() {
+        return jpa.count();
     }
 
 }
